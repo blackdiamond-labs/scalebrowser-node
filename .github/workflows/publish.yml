@@ -1,0 +1,106 @@
+# Build, check and publish @scalebrowser/sdk to npm, with a provenance
+# attestation that names this repository and this run.
+#
+# This repository is published from the Scalebrowser source at each release:
+# the release pushes one commit and one tag `vX.Y.Z`. The tag message carries
+# the manifest of the build that was tested before the push (every file of the
+# package with its SHA-256). This workflow builds the same commit again and
+# publishes only if its package matches that manifest file for file. After the
+# publish it checks what the registry serves against the manifest once more.
+#
+# GitHub-hosted runners only, and no pull_request trigger: nothing from a fork
+# runs here. A manual run is a dry run: everything except the manifest check
+# and the publish, which both need a release tag.
+
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # trusted publishing (OIDC) and the provenance attestation
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # No `registry-url`: it writes a token line into `.npmrc`, and npm reads an
+      # empty token from it instead of none. It then answers ENEEDAUTH instead
+      # of signing in over OIDC.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      # After the Node setup, never before it: setup-node puts its own npm first
+      # on the PATH and would replace the one provided here.
+      - name: Use an npm that can do trusted publishing
+        run: bash ci/npm-trusted-publishing.sh ensure
+
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Self-test of the manifest check
+        run: node ci/package-manifest.mjs --self-test
+
+      # Packed ONCE. The same tarball is compared, installed and published.
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pkg"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/pkg" --silent
+          echo "tarball=$(ls "$RUNNER_TEMP"/pkg/*.tgz)" >> "$GITHUB_OUTPUT"
+
+      - name: Package smoke (installs the packed tarball)
+        run: node ci/package-smoke.mjs "${{ steps.pack.outputs.tarball }}"
+
+      - name: Refuse a tag that disagrees with the package version
+        if: github.event_name == 'push'
+        run: |
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "v$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json $pkg"
+            exit 1
+          fi
+
+      # The checkout keeps the commit a tag points at, not the annotated tag
+      # object, so the tag is fetched once more to read its message.
+      - name: The package is the approved build
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/approved.json"
+          node ci/package-manifest.mjs "${{ steps.pack.outputs.tarball }}" --expect "$RUNNER_TEMP/approved.json"
+
+      - name: Publish
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          bash ci/npm-trusted-publishing.sh assert
+          npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
+
+      - name: What npm serves is the approved build
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          node ci/package-manifest.mjs "$name@${GITHUB_REF_NAME#v}" --wait 600 --expect "$RUNNER_TEMP/approved.json"
