@@ -60,14 +60,17 @@ jobs:
       - name: Self-test of the manifest check
         run: node ci/package-manifest.mjs --self-test
 
-      # Packed ONCE. The same tarball is compared, installed and published.
+      # Packed ONCE. The same tarball is compared, installed and published. Its
+      # manifest goes into the log, so any run can be held against another.
       - name: Pack
         id: pack
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/pkg"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/pkg" --silent
-          echo "tarball=$(ls "$RUNNER_TEMP"/pkg/*.tgz)" >> "$GITHUB_OUTPUT"
+          tarball="$(ls "$RUNNER_TEMP"/pkg/*.tgz)"
+          node ci/package-manifest.mjs "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
       - name: Package smoke (installs the packed tarball)
         run: node ci/package-smoke.mjs "${{ steps.pack.outputs.tarball }}"
