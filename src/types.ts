@@ -89,6 +89,14 @@ export interface Profile {
    * Additive; a daemon predating the credential vault simply omits it.
    */
   platforms?: string[];
+  /**
+   * The country the persona's clock places it in (`persona.timezone`), `null` for
+   * a zone outside the daemon's cohort table. Never read the country out of the
+   * language: Chrome sends the list of its UI language, so a profile in Vienna
+   * speaks `de-DE` and one in Stockholm `en-US`. Additive; present on list/get
+   * (`ProfileView`), absent where `protection` is.
+   */
+  timezone_country?: string | null;
 }
 
 export interface Group {

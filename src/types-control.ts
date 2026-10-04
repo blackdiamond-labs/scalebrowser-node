@@ -151,6 +151,14 @@ export interface Account {
   /** Unix seconds; when the cached entitlement stops being valid. */
   expires_at?: number;
   permits_launch: boolean;
+  /** The control plane refused this machine because the account has no active
+   *  plan. Choosing one on the pricing page is the only remedy; the daemon
+   *  enrols the machine by itself on its next check after that. Absent when
+   *  false. */
+  plan_required?: boolean;
+  /** With `plan_required`: the control plane said this account still has its
+   *  free trial. Absent when false. */
+  trial_available?: boolean;
 }
 
 // ── Health (`/health`) ────────────────────────────────────────────────────────

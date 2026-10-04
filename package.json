@@ -1,6 +1,6 @@
 {
   "name": "@scalebrowser/sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Official Node/TypeScript SDK for the Scalebrowser daemon: typed REST client plus a direct-CDP driver plane (nodriver-style, not Playwright).",
   "type": "module",
   "license": "MIT",

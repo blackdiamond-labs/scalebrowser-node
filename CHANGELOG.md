@@ -9,6 +9,21 @@ reconstructing it here would look like a record that had been kept all along.
 The daemon and the SDK version independently. An SDK release names the daemon
 version it was tested against wherever that matters.
 
+## 1.1.0 (2026-10-04)
+
+Three fields the daemon has sent since 0.20.0 now have types. All three are
+optional, so code written against 1.0.0 compiles unchanged.
+
+- `Profile.timezone_country`: the country the profile's clock places it in,
+  `null` for a zone the daemon has no country for. Read the country from here,
+  not from the language: Chrome sends the list of its interface language, so a
+  profile in Vienna sends `de-DE`.
+- `Account.plan_required`: the account has no active plan, and choosing one is
+  the only remedy. The daemon enrols the machine by itself on its next check
+  after that.
+- `Account.trial_available`: together with `plan_required`, the account still
+  has its free trial.
+
 ## 1.0.0 (2026-09-27)
 
 The library works as in 0.9.0. What changes is the promise: from this release
