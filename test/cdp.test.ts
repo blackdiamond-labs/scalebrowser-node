@@ -186,3 +186,100 @@ describe('direct-CDP driver', () => {
     session.close();
   });
 });
+
+/**
+ * A page that changes document: every `Page.navigate` starts a new one, an
+ * isolated world belongs to the document it was made in, and an id from an
+ * earlier document is refused the way Chrome refuses it. Every `Runtime.evaluate`
+ * is kept, so a test can ask which world it ran in.
+ */
+function documentServer(opts: { goneOnce?: boolean } = {}): {
+  start: () => Promise<string>;
+  stop: () => void;
+  evaluations: CdpCommand[];
+} {
+  const evaluations: CdpCommand[] = [];
+  let gone = opts.goneOnce ?? false;
+  let server: WebSocketServer | undefined;
+  let epoch = 1;
+  const start = async (): Promise<string> => {
+    server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+    server.on('connection', (ws) => {
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as CdpCommand;
+        const reply = (result: unknown): void => ws.send(JSON.stringify({ id: msg.id, result }));
+        switch (msg.method) {
+          case 'Target.getTargets':
+            return reply({ targetInfos: [{ targetId: 't1', type: 'page', title: '', url: 'about:blank', attached: false }] });
+          case 'Target.attachToTarget':
+            return reply({ sessionId: 'sess-1' });
+          case 'Page.navigate':
+            epoch += 1;
+            return reply({ frameId: 'f1' });
+          case 'Page.getFrameTree':
+            return reply({ frameTree: { frame: { id: 'f1' } } });
+          case 'Page.createIsolatedWorld':
+            return reply({ executionContextId: 100 + epoch });
+          case 'Runtime.evaluate': {
+            evaluations.push(msg);
+            const ctx = msg.params?.['contextId'];
+            if (gone || (ctx !== undefined && ctx !== 100 + epoch)) {
+              gone = false;
+              ws.send(JSON.stringify({ id: msg.id, error: { code: -32000, message: 'Cannot find context with specified id' } }));
+              return;
+            }
+            const expr = String(msg.params?.['expression']);
+            const value = expr === 'document.readyState' ? 'complete' : `doc:${epoch}`;
+            return reply({ result: { type: 'string', value } });
+          }
+          default:
+            return reply({});
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server!.on('listening', resolve));
+    return `ws://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  };
+  return { start, stop: () => server?.close(), evaluations };
+}
+
+describe('direct-CDP driver across documents', () => {
+  it('reads the CURRENT document in an isolated world after a navigation', async () => {
+    const page = documentServer();
+    const session = await openCdpSession(await page.start());
+    try {
+      await session.navigate('https://a.example', { wait: false });
+      expect(await session.evaluate<string>('document.title', { isolated: true })).toBe('doc:2');
+      await session.navigate('https://b.example', { wait: false });
+      expect(await session.evaluate<string>('document.title', { isolated: true })).toBe('doc:3');
+    } finally {
+      session.close();
+      page.stop();
+    }
+  });
+
+  it('retries a load read whose world vanished while the document committed', async () => {
+    const page = documentServer({ goneOnce: true });
+    const session = await openCdpSession(await page.start());
+    try {
+      await session.navigate('https://a.example');
+      expect(page.evaluations.length).toBe(2);
+    } finally {
+      session.close();
+      page.stop();
+    }
+  });
+
+  it("waits for the load without reading in the page's own world", async () => {
+    const page = documentServer();
+    const session = await openCdpSession(await page.start());
+    try {
+      await session.navigate('https://a.example');
+      expect(page.evaluations.length).toBeGreaterThan(0);
+      for (const e of page.evaluations) expect(e.params?.['contextId']).toBeDefined();
+    } finally {
+      session.close();
+      page.stop();
+    }
+  });
+});

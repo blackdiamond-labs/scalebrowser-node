@@ -9,6 +9,26 @@ reconstructing it here would look like a record that had been kept all along.
 The daemon and the SDK version independently. An SDK release names the daemon
 version it was tested against wherever that matters.
 
+## 1.2.0 (2026-10-22)
+
+Two fixes in the CDP driver, both measured against a real browser, and three
+methods for routes the daemon serves since 0.24.0. Nothing is removed or renamed.
+
+- `navigate()` waited for the load by reading `document.readyState` in the
+  page's own world. A page that wraps that getter saw two reads with no script of
+  its own on the stack. The wait now reads from an isolated world.
+- `evaluate(expr, { isolated: true })` kept the id of its isolated world across a
+  navigation, so every isolated read after a page change failed with
+  `Cannot find context with specified id`. It now asks for the world of the
+  current document on every call.
+- `revealRequest(profileId, seq, { vault_password })`: what a recorded request
+  carried (the full address with its query, every header value and, on request,
+  the body), behind the vault password. `seq` is the number the agent's
+  `net_capture` tool lists.
+- `getAgentTools()` and `setAgentToolGroup(group, enabled)`: which optional MCP tool
+  groups agents on this machine see.
+- The README lists every method of the client.
+
 ## 1.1.0 (2026-10-04)
 
 Three fields the daemon has sent since 0.20.0 now have types. All three are

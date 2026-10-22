@@ -196,6 +196,32 @@ export interface RemoteStatus {
  * purpose, a residential line you pay for or a whitelisted office address, where
  * the rule would refuse every start after the first.
  */
+/** An optional tool group: `basic` is always served and has no switch. */
+export type ToolGroupId = 'video' | 'tasks' | 'fleet' | 'captcha' | 'extras' | 'developer';
+
+/** One switchable group of MCP tools. */
+export interface AgentToolGroup {
+  id: ToolGroupId;
+  /** Do agents on this machine see these tools? */
+  enabled: boolean;
+  /** Did a person decide this, or is the configured default still standing? */
+  explicit: boolean;
+  /** The tools the group adds, among the profiles this daemon serves. */
+  tools: string[];
+}
+
+/**
+ * What `GET /v1/agent-tools` answers: which optional tool groups agents see.
+ *
+ * Off by default. An agent sees the basic tools until a group is switched on,
+ * which keeps the tool list it pays for on every request short.
+ */
+export interface AgentTools {
+  groups: AgentToolGroup[];
+  /** How many tools an agent sees right now. */
+  served: number;
+}
+
 export interface ExitRuleStatus {
   /** Does the rule apply on this machine? */
   enabled: boolean;

@@ -132,6 +132,75 @@ export interface RevealCookiesResult {
   cookies: RevealedCookie[];
 }
 
+// ── Recorded requests (`/v1/profiles/:id/network/:seq/reveal`) ─────────────────
+
+/** One header, name and value as the network stack saw them. */
+export interface RequestHeader {
+  name: string;
+  value: string;
+}
+
+/**
+ * What a request looked like, with every value that could be a secret left out: the
+ * address stops at the path, headers are listed by name. This is the form the agent's
+ * `net_capture` tool answers with.
+ */
+export interface RequestShape {
+  /** Increasing, never reused. The number the reveal route takes. */
+  seq: number;
+  method: string;
+  origin: string;
+  path: string;
+  /** The address had a query. The query itself is not here. */
+  has_query: boolean;
+  /** The fetch destination (`document`, `script`, `image`), empty for fetch/XHR. */
+  resource_type: string;
+  top_frame_origin: string;
+  /** `pending`, `loading`, `complete`, `failed` or `aborted`. */
+  state: string;
+  /** Status of the final response; 0 while there is none. */
+  status: number;
+  mime_type: string;
+  protocol: string;
+  from_cache: boolean;
+  net_error: number;
+  redirects: number;
+  encoded_bytes: number;
+  body_bytes: number;
+  /** Whether the body can still be revealed. */
+  has_body: boolean;
+  /** Why it cannot: `too_large`, `evicted` or `incomplete`. Empty otherwise. */
+  body_dropped: string;
+  request_header_names: string[];
+  response_header_names: string[];
+  age_ms: number;
+}
+
+export interface RevealRequestBody {
+  /** The same gate a cookie value sits behind. */
+  vault_password: string;
+  /** Return the decoded body too. Left out by default. */
+  include_body?: boolean;
+  /** Longest body to return (default 1 MiB, at most 8 MiB). */
+  max_body_bytes?: number | null;
+}
+
+/** A recorded request in full: the query, every header value and, on request, the body. */
+export interface RevealRequestResult {
+  seq: number;
+  /** The final address, query included. */
+  url: string;
+  shape: RequestShape;
+  request_headers: RequestHeader[];
+  response_headers: RequestHeader[];
+  /** The decoded body: text if it was valid UTF-8, base64 otherwise (`body_base64`). */
+  body: string | null;
+  body_base64: boolean;
+  body_truncated: boolean;
+  /** Why the body is missing although asked for: `decode_failed` or `decoded_too_large`. Empty otherwise. */
+  body_error: string;
+}
+
 // ── Secret Layer (`/v1/profiles/:id/secrets`) ─────────────────────────────────
 
 /** What a stored value is. */

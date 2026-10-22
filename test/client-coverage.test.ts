@@ -197,6 +197,19 @@ describe('cookies', () => {
   });
 });
 
+describe('recorded requests', () => {
+  it('reveals a request only through the vault password', async () => {
+    const { client, calls } = makeClient(() =>
+      json({ seq: 7, url: 'https://x.test/a?t=1', request_headers: [], response_headers: [], body: null, body_base64: false, body_truncated: false }),
+    );
+    const result = await client.revealRequest('p1', 7, { vault_password: 'pw', include_body: true });
+    expect(result.seq).toBe(7);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url).toBe('http://daemon/v1/profiles/p1/network/7/reveal');
+    expect((calls[0]?.body as Record<string, unknown>)['vault_password']).toBe('pw');
+  });
+});
+
 describe('account + health', () => {
   it('reads the licence state', async () => {
     const { client } = makeClient(() =>

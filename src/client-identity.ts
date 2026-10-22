@@ -4,7 +4,7 @@
 // the wire-type mirror (client*.ts) and listed in sdk_coverage.rs.
 import { ClientCore, enc } from './client-core';
 import type { CredentialBundle, CredentialImportResult, CredentialMeta, PutCredentialBody, RevealedCredential, VaultStatus } from './types-credentials';
-import type { BindInboxBody, CreateInboxBody, Inbox, InboxBindings, PasskeyRow, RevealCookiesBody, RevealCookiesResult, SecretDeleteResult, SecretListResult, SecretPatchBody, SecretRow, SecretRunBody, SecretRunResult, SecretScrubResult, UpdateInboxBody } from './types-identity';
+import type { BindInboxBody, CreateInboxBody, Inbox, InboxBindings, PasskeyRow, RevealCookiesBody, RevealCookiesResult, RevealRequestBody, RevealRequestResult, SecretDeleteResult, SecretListResult, SecretPatchBody, SecretRow, SecretRunBody, SecretRunResult, SecretScrubResult, UpdateInboxBody } from './types-identity';
 
 export class IdentityApi extends ClientCore {
   // ── Platform credentials ────────────────────────────────────────────────────
@@ -259,6 +259,18 @@ export class IdentityApi extends ClientCore {
    */
   revealCookies(profileId: string, body: RevealCookiesBody): Promise<RevealCookiesResult> {
     return this.request<RevealCookiesResult>('POST', `/v1/profiles/${enc(profileId)}/cookies/reveal`, body);
+  }
+
+  // ── Recorded requests ──────────────────────────────────────────────────────
+
+  /**
+   * The one door what a recorded request carried leaves through, and it needs the vault
+   * password: the full address with its query, every header value (`Cookie`,
+   * `Authorization`) and, on request, the body. The agent's `net_capture` answers by
+   * shape only. `seq` is the number it listed.
+   */
+  revealRequest(profileId: string, seq: number, body: RevealRequestBody): Promise<RevealRequestResult> {
+    return this.request<RevealRequestResult>('POST', `/v1/profiles/${enc(profileId)}/network/${seq}/reveal`, body);
   }
 
 }

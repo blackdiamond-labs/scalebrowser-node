@@ -69,7 +69,13 @@ import type {
   UpdateProfileBody,
   UpdateProxyBody,
 } from './types-requests';
-import type { ArtifactBytes, ExitRuleStatus, RemoteStatus } from './types-control';
+import type {
+  AgentTools,
+  ArtifactBytes,
+  ExitRuleStatus,
+  RemoteStatus,
+  ToolGroupId,
+} from './types-control';
 
 
 /** The daemon's own default capacity limits. */
@@ -458,6 +464,30 @@ export class ScalebrowserClient extends ClientCore {
    */
   async setExitRule(enabled: boolean, signal?: AbortSignal): Promise<ExitRuleStatus> {
     return this.request<ExitRuleStatus>('PUT', '/v1/exit-rule', { enabled }, { signal });
+  }
+
+  /**
+   * Which optional MCP tool groups agents on this machine see.
+   *
+   * Agents see the basic tools by default; video, tasks, profile management,
+   * the captcha helpers, the extras and the developer tools are one switch each.
+   */
+  async getAgentTools(signal?: AbortSignal): Promise<AgentTools> {
+    return this.request<AgentTools>('GET', '/v1/agent-tools', undefined, { signal });
+  }
+
+  /**
+   * Turn one tool group on or off for every agent on this machine.
+   *
+   * It applies to the next tool list an agent asks for. A session that listed
+   * its tools before keeps that list until it reconnects.
+   */
+  async setAgentToolGroup(
+    group: ToolGroupId,
+    enabled: boolean,
+    signal?: AbortSignal,
+  ): Promise<AgentTools> {
+    return this.request<AgentTools>('PUT', '/v1/agent-tools', { group, enabled }, { signal });
   }
 
   // ── Events (SSE) ───────────────────────────────────────────────────────────

@@ -77,6 +77,7 @@ describe("ScalebrowserClient public surface", () => {
     expectTypeOf<ScalebrowserClient>().toHaveProperty("ready")
     expectTypeOf<ScalebrowserClient>().toHaveProperty("revealCookies")
     expectTypeOf<ScalebrowserClient>().toHaveProperty("revealCredential")
+    expectTypeOf<ScalebrowserClient>().toHaveProperty("revealRequest")
     expectTypeOf<ScalebrowserClient>().toHaveProperty("sendInput")
     expectTypeOf<ScalebrowserClient>().toHaveProperty("setInterruptionLock")
     expectTypeOf<ScalebrowserClient>().toHaveProperty("setInterruptionRule")

@@ -241,7 +241,6 @@ export class CdpSession {
   readonly sessionId: string | undefined;
   readonly #client: InputClient | undefined;
   readonly #profileId: string | undefined;
-  #isolatedContextId: number | undefined;
 
   constructor(conn: CdpConnection, sessionId?: string, client?: InputClient, profileId?: string) {
     this.#conn = conn;
@@ -302,7 +301,7 @@ export class CdpSession {
       awaitPromise: opts.awaitPromise ?? true,
       returnByValue: opts.returnByValue ?? true,
     };
-    if (opts.isolated) params['contextId'] = await this.#isolatedContext();
+    if (opts.isolated) params['contextId'] = await this.createIsolatedWorld();
     const res = await this.send<EvaluateResult>('Runtime.evaluate', params);
     if (res.exceptionDetails) {
       throw new CdpError(-1, res.exceptionDetails.text || res.exceptionDetails.exception?.description || 'evaluate exception');
@@ -310,7 +309,14 @@ export class CdpSession {
     return res.result.value as T;
   }
 
-  /** Create an isolated world for the (main) frame and return its execution context id. */
+  /**
+   * Create an isolated world for the (main) frame and return its execution context id.
+   *
+   * The id belongs to the document that is loaded right now. After a navigation it
+   * names a context that no longer exists, so ask again instead of keeping it:
+   * Chrome hands back the same world for the same name, so asking costs one round
+   * trip.
+   */
   async createIsolatedWorld(frameId?: string, worldName = '__sb'): Promise<number> {
     let frame = frameId;
     if (!frame) {
@@ -378,15 +384,18 @@ export class CdpSession {
     return this.#client.sendInput(this.#profileId, { ...body, humanize: true } as TrustedInputBody);
   }
 
-  async #isolatedContext(): Promise<number> {
-    if (this.#isolatedContextId === undefined) this.#isolatedContextId = await this.createIsolatedWorld();
-    return this.#isolatedContextId;
-  }
-
+  // The poll reads in an isolated world: a page that wraps `document.readyState`
+  // sees a read from its own world, with a caller that is none of its scripts.
+  // While the new document commits, the world of the old one can vanish between
+  // asking for it and reading in it; the browser refuses that read with its own
+  // error code, and it is retried. A closed connection still fails at once.
   async #waitForLoad(timeout: number): Promise<void> {
     const deadline = Date.now() + timeout;
     for (;;) {
-      const ready = await this.evaluate<string>('document.readyState');
+      const ready = await this.evaluate<string>('document.readyState', { isolated: true }).catch((err: unknown) => {
+        if (err instanceof CdpError && err.code !== -1) return undefined;
+        throw err;
+      });
       if (ready === 'complete') return;
       if (Date.now() > deadline) throw new CdpError(-1, 'navigation wait timed out');
       await delay(50);

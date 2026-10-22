@@ -62,10 +62,13 @@ try {
 
 Every `/v1` endpoint is a typed method on `ScalebrowserClient`:
 
-- **Profiles**: `listProfiles`, `getProfile`, `createProfile`, `updateProfile`,
-  `deleteProfile`, `startProfile`, `stopProfile`
+- **Profiles**: `listProfiles`, `listProfileIds`, `countProfiles`, `getProfile`,
+  `createProfile`, `updateProfile`, `deleteProfile`, `startProfile`, `stopProfile`.
+  `releaseProfile` drops an agent's lease without its handle (the operator's way
+  out), and `takeoverProfile` asks for a profile that is open on another machine
+  of your account
 - **Bulk**: `bulkCreateProfiles`, `bulkStart`, `bulkStop`, `bulkDelete`,
-  `bulkAssignProxy`
+  `bulkAssignProxy`, `bulkAssignExtensions`
 - **Groups / Presets**: `listGroups`/`createGroup`/`getGroup`/`updateGroup`/`deleteGroup`,
   `listPresets`/`createPreset`/`getPreset`/`updatePreset`/`deletePreset`,
   `getPersonaConstraints`. A preset is `config` (what the profiles do:
@@ -78,13 +81,20 @@ Every `/v1` endpoint is a typed method on `ScalebrowserClient`:
   it; pass `id` to reuse an existing proxy's stored credentials). Credentials
   are write-only, never returned
 - **Extensions**: `listExtensions`, `attachExtension`, `detachExtension`, plus
-  the daemon-wide library (`uploadExtension`, `getLibraryExtension`,
-  `deleteLibraryExtension`). An attached package IS loaded into the browser at
+  the daemon-wide library (`listLibraryExtensions`, `uploadExtension`,
+  `getLibraryExtension`, `deleteLibraryExtension`, `deleteLibraryExtensionVersion`). An attached package IS loaded into the browser at
   launch, under the canonical Web-Store id its own key derives
-- **Credentials**: `listCredentials`, `putCredential`, `revealCredential`
-  (needs the vault password), `exportCredentials`, `importCredentials`
+- **Credentials**: `listCredentials`, `putCredential`, `deleteCredential`,
+  `revealCredential` (needs the vault password), `exportCredentials`,
+  `importCredentials`. The vault password itself: `vaultStatus`, `setVaultPassword`
+- **Secret layer**: `getSecretLayer`, `setSecretLayer`, `listSecrets`,
+  `updateSecret`, `deleteSecret`. `scrubText` filters a text you hold against a
+  profile's values, and `runWithSecrets` runs a command with named values in its
+  environment, so no value crosses a socket
 - **Cookies**: `revealCookies`, the one route a cookie VALUE leaves through,
   behind the same vault password
+- **Recorded requests**: `revealRequest`, the one route what a request carried (query,
+  header values, body) leaves through, behind the same vault password
 - **Sessions**: `exportSession`, `importSession`
 - **Mailboxes**: `listInboxes`, `createInbox`, `updateInbox`, `deleteInbox`,
   `getInboxBindings`, `bindInbox`, `unbindInbox`, which is where a profile's
@@ -98,6 +108,30 @@ Every `/v1` endpoint is a typed method on `ScalebrowserClient`:
   may answer when the browser asks something
 - **Artifacts**: `putArtifact` (hand the daemon a file to upload later),
   `getArtifact` (fetch a screenshot, download or saved PDF as bytes)
+- **Tasks and memory**: `listTasks`, `createTasks`, `cancelTask`, `deleteTask`,
+  plus a profile's standing instructions for agents, its `PROFILE.md`:
+  `getProfileMemory`, `putProfileMemory`, `deleteProfileMemory`
+- **Videos**: `listVideos`, `getVideo`, `renameVideo`, `deleteVideo`,
+  `cancelVideo`, `rerenderVideo`, `videoAccess`, `downloadVideoFile`,
+  `videosStorage`; recordings with `listRecordings`, `getRecording`,
+  `deleteRecordingRaw`, `renderRecording`; public links with `share`,
+  `shareStatus`, `revokeShare`
+- **Video presets**: `listVideoPresets`, `getVideoPreset`, `createVideoPreset`,
+  `updateVideoPreset`, `duplicateVideoPreset`, `deleteVideoPreset`, and a look
+  at an unsaved config with `previewVideoPreset`, `previewVideoPresetClip`,
+  `downloadVideoPresetClip`. The files a preset points at: `listMedia`,
+  `uploadMedia`, `deleteMedia`, `mediaFile`. Narration keys: `listTtsProviders`,
+  `putTtsProvider`, `verifyTtsProvider`, `deleteTtsProvider`. Encoders:
+  `getCodecs`, `setCodecEnabled`
+- **Fingerprint audit**: `startAudit` drives the profile's running browser through
+  the external detector pages, `getAudit` reads the state and the last report
+- **Exit addresses**: `getExitStatus` (which addresses a profile owns), and the
+  machine's rule that one address belongs to one profile: `getExitRule`,
+  `setExitRule`
+- **Machine settings**: `getRemoteAccess`, `setRemoteAccess` (may a chat service
+  reach this machine's browsers), `getAgentTools`, `setAgentToolGroup` (which
+  optional MCP tool groups agents see), `getConnection` (which installation
+  answered: its data directory and its binary)
 - **Input**: `sendInput`
 - **Metrics / Account / Health**: `getMetrics`, `getAccount`, `health`, `ready`.
   The first two answer 404 on a daemon without them, which the SDK treats as
@@ -105,7 +139,9 @@ Every `/v1` endpoint is a typed method on `ScalebrowserClient`:
   state, and the account reads `licensed: false`, which is what "self-hosted, no
   control plane" means
 
-Errors map to typed exceptions carrying the daemon's numeric code (4001–4012):
+`setToken` swaps the bearer token on a live client.
+
+Errors map to typed exceptions carrying the daemon's numeric code (4001–4013):
 
 ```ts
 import { ApiError, ErrorCode } from '@scalebrowser/sdk';
@@ -140,7 +176,10 @@ for await (const e of sb.events()) {
 `CdpSession` (returned by `connectCdp` / `launch`) gives you:
 
 - `send<T>(method, params?)`: raw CDP command, awaited by id (concurrent-safe)
-- `navigate(url, { wait, timeout })`, `evaluate<T>(expr, { isolated })`
+- `navigate(url, { wait, timeout })`, `evaluate<T>(expr, { isolated })`. The
+  wait for the load reads from an isolated world, so a page that watches its own
+  `document.readyState` sees no foreign read; `isolated: true` asks for the world
+  of the document that is loaded now, on every call
 - `createIsolatedWorld(frameId?, worldName?)`
 - `attachToPage({ targetId?, create?, url? })`
 - `on(method, cb)` / `events()`: CDP event subscription scoped to the session
